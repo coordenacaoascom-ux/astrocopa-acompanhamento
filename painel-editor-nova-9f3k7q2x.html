@@ -256,8 +256,10 @@ function fetchLatest(sinceParam){
 function startViewer(){
   setStatus('🔌 Conectando…');
   fetchLatest('all').then(()=>setStatus('🔴 AO VIVO — atualiza sozinho'));
-  // GARANTIA: consulta a central a cada 8s (funciona mesmo se o tempo real cair)
-  setInterval(()=>fetchLatest('10m'), 8000);
+  // GARANTIA: consulta a central a cada 3s (funciona mesmo se o tempo real cair / rede corporativa)
+  setInterval(()=>fetchLatest('10m'), 3000);
+  // ao voltar pra aba, atualiza na hora
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) fetchLatest('10m'); });
   // tempo real por cima (atualização instantânea quando disponível)
   try{
     const es=new EventSource(NTFY_URL+'/sse');
