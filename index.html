@@ -256,8 +256,8 @@ function fetchLatest(sinceParam){
 function startViewer(){
   setStatus('🔌 Conectando…');
   fetchLatest('all').then(()=>setStatus('🔴 AO VIVO — atualiza sozinho'));
-  // GARANTIA: consulta a central a cada 3s (funciona mesmo se o tempo real cair / rede corporativa)
-  setInterval(()=>fetchLatest('10m'), 3000);
+  // GARANTIA: consulta a central a cada 12s (respeita o limite do ntfy grátis; o tempo real cobre o instantâneo)
+  setInterval(()=>fetchLatest('10m'), 12000);
   // ao voltar pra aba, atualiza na hora
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) fetchLatest('10m'); });
   // tempo real por cima (atualização instantânea quando disponível)
@@ -344,8 +344,8 @@ if(IS_EDITOR){
     let remote=null; try{ remote=last?JSON.parse(last):null; }catch(e){}
     const rHas = remote && (Object.keys(remote.winners||{}).length || Object.keys(remote.scores||{}).length);
     const lHas = Object.keys(winners).length || Object.keys(scores).length;
-    if(rHas){ winners=remote.winners||{}; scores=remote.scores||{}; saveLocal(); render(); setStatus('🟢 Sincronizado'); }
-    else if(lHas){ publishNow(); }
+    if(lHas){ publishNow(); setStatus('🟢 Sincronizado'); }   // suas marcações locais mandam (não perde nada)
+    else if(rHas){ winners=remote.winners||{}; scores=remote.scores||{}; saveLocal(); render(); setStatus('🟢 Sincronizado'); }
     else { setStatus('🟢 Pronto para começar'); }
   }).catch(()=>setStatus('⚠️ Sem internet — editando local'));
   setInterval(publishNow, 240000);      // mantém o cache "vivo" (a cada 4 min)
