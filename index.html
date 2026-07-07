@@ -329,7 +329,17 @@ if(IS_EDITOR){
   };
   loadLocal();
   render();
-  publishNow();                         // publica o estado atual ao abrir
+  // ao abrir, adota o estado compartilhado (evita apagar resultados ao abrir em outro aparelho)
+  fetch(NTFY_URL+'/json?poll=1&since=all').then(r=>r.text()).then(t=>{
+    const lines=t.trim().split('\n').filter(Boolean); let last=null;
+    for(let i=lines.length-1;i>=0;i--){ try{const o=JSON.parse(lines[i]); if(o.event==='message'&&o.message){last=o.message;break;} }catch(e){} }
+    let remote=null; try{ remote=last?JSON.parse(last):null; }catch(e){}
+    const rHas = remote && (Object.keys(remote.winners||{}).length || Object.keys(remote.scores||{}).length);
+    const lHas = Object.keys(winners).length || Object.keys(scores).length;
+    if(rHas){ winners=remote.winners||{}; scores=remote.scores||{}; saveLocal(); render(); setStatus('🟢 Sincronizado'); }
+    else if(lHas){ publishNow(); }
+    else { setStatus('🟢 Pronto para começar'); }
+  }).catch(()=>setStatus('⚠️ Sem internet — editando local'));
   setInterval(publishNow, 240000);      // mantém o cache "vivo" (a cada 4 min)
 }else{
   document.getElementById('reset').style.display='none';
