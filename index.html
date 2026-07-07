@@ -170,7 +170,7 @@ const COLS=[
 ];
 
 const STORE='astrocopa_botao_v2';
-let winners={}, scores={};
+let winners={}, scores={}, lastKey="";
 
 function loadLocal(){ try{const d=JSON.parse(localStorage.getItem(STORE))||{}; winners=d.winners||{}; scores=d.scores||{};}catch(e){} }
 function saveLocal(){ try{localStorage.setItem(STORE, JSON.stringify({winners,scores}));}catch(e){} }
@@ -237,27 +237,33 @@ function publishState(){ if(!IS_EDITOR) return; clearTimeout(pubTimer); setStatu
 function applyRemote(msgStr){
   try{
     const d=JSON.parse(msgStr);
+    const key=JSON.stringify({w:d.winners||{}, s:d.scores||{}});
+    if(key===lastKey) return;   // nada mudou -> não redesenha (evita piscar)
+    lastKey=key;
     winners=d.winners||{}; scores=d.scores||{};
     render();
   }catch(e){}
 }
-function startViewer(){
-  setStatus('🔌 Conectando ao vivo…');
-  // 1) pega o estado mais recente do cache = ÚLTIMA mensagem em ordem cronológica
-  //    (o ntfy entrega em ordem; a última publicada é o estado atual)
-  fetch(NTFY_URL+'/json?poll=1&since=all').then(r=>r.text()).then(t=>{
+// pega a ÚLTIMA mensagem publicada (o ntfy entrega em ordem cronológica)
+function fetchLatest(sinceParam){
+  return fetch(NTFY_URL+'/json?poll=1&since='+sinceParam).then(r=>r.text()).then(t=>{
     const lines=t.trim().split('\n').filter(Boolean);
     for(let i=lines.length-1;i>=0;i--){
-      try{ const o=JSON.parse(lines[i]); if(o.event==='message' && o.message){ applyRemote(o.message); break; } }catch(e){}
+      try{ const o=JSON.parse(lines[i]); if(o.event==='message' && o.message){ applyRemote(o.message); return; } }catch(e){}
     }
   }).catch(()=>{});
-  // 2) tempo real
+}
+function startViewer(){
+  setStatus('🔌 Conectando…');
+  fetchLatest('all').then(()=>setStatus('🔴 AO VIVO — atualiza sozinho'));
+  // GARANTIA: consulta a central a cada 8s (funciona mesmo se o tempo real cair)
+  setInterval(()=>fetchLatest('10m'), 8000);
+  // tempo real por cima (atualização instantânea quando disponível)
   try{
     const es=new EventSource(NTFY_URL+'/sse');
-    es.onopen=()=>setStatus('🔴 AO VIVO — acompanhamento em tempo real');
-    es.onerror=()=>setStatus('🟠 Reconectando ao vivo…');
+    es.onopen=()=>setStatus('🔴 AO VIVO — atualiza sozinho');
     es.onmessage=(e)=>{ try{ const o=JSON.parse(e.data); if(o.event==='message' && o.message) applyRemote(o.message); }catch(err){} };
-  }catch(e){ setStatus('⚠️ Não foi possível conectar ao vivo'); }
+  }catch(e){}
 }
 
 /* ---------- render ---------- */
