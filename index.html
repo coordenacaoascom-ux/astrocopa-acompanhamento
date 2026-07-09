@@ -225,14 +225,21 @@ function setScore(mid, side, val){
 /* ---------- sincronização via ntfy ---------- */
 function setStatus(txt){ const b=document.getElementById('syncbadge'); if(b) b.textContent=txt; }
 let pubTimer=null;
-function publishNow(){
+function publishNow(retries){
   if(!IS_EDITOR) return;
+  retries=retries||0;
   const payload=JSON.stringify({winners,scores,updatedAt:Date.now()});
-  fetch(NTFY_URL,{method:'POST',body:payload})
-    .then(()=>setStatus('🟢 Sincronizado — acompanhamento atualizado'))
-    .catch(()=>setStatus('⚠️ Sem internet — salvo localmente'));
+  fetch(NTFY_URL,{method:'POST',body:payload}).then(r=>{
+    if(r.ok){ setStatus('🟢 Sincronizado — acompanhamento atualizado'); }
+    else if(r.status===429 && retries<5){ setStatus('⏳ Central ocupada — reenviando…'); setTimeout(()=>publishNow(retries+1), 7000); }
+    else if(retries<5){ setTimeout(()=>publishNow(retries+1), 7000); }
+    else { setStatus('⚠️ Falha ao enviar (código '+r.status+')'); }
+  }).catch(()=>{
+    if(retries<5){ setStatus('⏳ Reenviando…'); setTimeout(()=>publishNow(retries+1), 7000); }
+    else setStatus('⚠️ Sem internet — salvo localmente');
+  });
 }
-function publishState(){ if(!IS_EDITOR) return; clearTimeout(pubTimer); setStatus('⏳ Enviando…'); pubTimer=setTimeout(publishNow, 400); }
+function publishState(){ if(!IS_EDITOR) return; clearTimeout(pubTimer); setStatus('⏳ Enviando…'); pubTimer=setTimeout(()=>publishNow(0), 400); }
 
 function applyRemote(msgStr){
   try{
@@ -256,16 +263,15 @@ function fetchLatest(sinceParam){
 function startViewer(){
   setStatus('🔌 Conectando…');
   fetchLatest('all').then(()=>setStatus('🔴 AO VIVO — atualiza sozinho'));
-  // GARANTIA: consulta a central a cada 12s (respeita o limite do ntfy grátis; o tempo real cobre o instantâneo)
-  setInterval(()=>fetchLatest('10m'), 12000);
-  // ao voltar pra aba, atualiza na hora
-  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) fetchLatest('10m'); });
-  // tempo real por cima (atualização instantânea quando disponível)
+  // TEMPO REAL (push, 1 conexão só — não pesa no limite): principal
   try{
     const es=new EventSource(NTFY_URL+'/sse');
-    es.onopen=()=>setStatus('🔴 AO VIVO — atualiza sozinho');
+    es.onopen=()=>{ setStatus('🔴 AO VIVO — atualiza sozinho'); fetchLatest('all'); }; // recupera ao (re)conectar
     es.onmessage=(e)=>{ try{ const o=JSON.parse(e.data); if(o.event==='message' && o.message) applyRemote(o.message); }catch(err){} };
   }catch(e){}
+  // segurança espaçada (a cada 20s) caso o tempo real caia — leve, dentro do limite
+  setInterval(()=>fetchLatest('10m'), 20000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) fetchLatest('10m'); });
 }
 
 /* ---------- render ---------- */
